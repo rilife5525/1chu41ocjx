@@ -1,0 +1,523 @@
+@import "tailwindcss";
+
+/* ============================================================
+   ZENITH RIOT 設計系統（Design System）
+   色彩：墨黑 Ink／叛逆紅 Riot Red／骨白 Bone／金線 Gold
+   造型：斜切多邊形、半色調網點、傾斜字體、撕裂邊緣
+   ============================================================ */
+:root {
+  --ink: #08080c;
+  --ink2: #12121a;
+  --ink3: #1d1d29;
+  --red: #e8112d;
+  --red2: #ff3b52;
+  --red3: #7a0716;
+  --bone: #f6f1e7;
+  --gold: #f2c14e;
+  --cyan: #45d6ff;
+  --line: rgba(255, 255, 255, 0.14);
+  --r-R: #9aa6b6;
+  --r-SR: #47c2ff;
+  --r-SSR: #ffc23d;
+  --r-UR: #ff3b6b;
+  --disp: "Bebas Neue", "Impact", "Arial Narrow", sans-serif;
+  --body: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", "Heiti TC", system-ui, sans-serif;
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  background: var(--ink);
+  color: var(--bone);
+  font-family: var(--body);
+  overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  color: inherit;
+}
+
+.disp {
+  font-family: var(--disp);
+  letter-spacing: 0.04em;
+}
+
+.noscroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.noscroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* ---------- 版面基礎 ---------- */
+.screen {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  padding: var(--safe-t) var(--safe-r) var(--safe-b) var(--safe-l);
+  /* 每個畫面各自獨立的合成層：切換畫面時整層（含關卡圖卡等被提升的子層）
+     會隨元素移除而一併銷毀，避免 GPU 合成層殘影（關卡圖卡卡在畫面上散不去） */
+  contain: paint;
+  isolation: isolate;
+}
+
+.halftone {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.16) 1.2px, transparent 1.6px);
+  background-size: 9px 9px;
+}
+.halftone-red {
+  background-image: radial-gradient(rgba(232, 17, 45, 0.55) 1.6px, transparent 2px);
+  background-size: 10px 10px;
+}
+.stripes {
+  background-image: repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.06) 0 8px, transparent 8px 16px);
+}
+
+/* ---------- 斜切面板 ---------- */
+.jag {
+  clip-path: polygon(0 6px, 10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 12px) 100%, 0 100%);
+}
+.jag-l {
+  clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 100%, 12px 100%);
+}
+.jag-r {
+  clip-path: polygon(16px 0, 100% 0, calc(100% - 12px) 100%, 0 100%);
+}
+.jag-torn {
+  clip-path: polygon(0 4%, 6% 0, 14% 5%, 24% 0, 36% 4%, 50% 0, 63% 5%, 77% 0, 90% 4%, 100% 0, 100% 96%, 92% 100%, 80% 95%, 66% 100%, 52% 96%, 38% 100%, 24% 95%, 12% 100%, 0 96%);
+}
+
+.panel {
+  position: relative;
+  background: linear-gradient(160deg, rgba(20, 20, 30, 0.92), rgba(8, 8, 12, 0.92));
+  border: 1px solid var(--line);
+}
+.panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1.4px);
+  background-size: 7px 7px;
+}
+
+/* ---------- 按鈕 ---------- */
+.p5-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 22px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  background: var(--ink);
+  color: var(--bone);
+  border: 0;
+  transform: skewX(-10deg);
+  transition: transform 0.12s ease, background 0.12s ease, color 0.12s ease, filter 0.12s ease;
+  box-shadow: 4px 4px 0 var(--red);
+  outline: 2px solid var(--bone);
+  outline-offset: -2px;
+}
+.p5-btn > * {
+  transform: skewX(10deg);
+}
+.p5-btn:hover {
+  background: var(--red);
+  color: #fff;
+  transform: skewX(-10deg) translate(-2px, -2px);
+  box-shadow: 7px 7px 0 var(--ink), 7px 7px 0 1px var(--bone);
+}
+.p5-btn:active {
+  transform: skewX(-10deg) translate(2px, 2px);
+  box-shadow: 1px 1px 0 var(--red);
+}
+.p5-btn.solid {
+  background: var(--red);
+  color: #fff;
+  box-shadow: 4px 4px 0 var(--ink), 4px 4px 0 1px var(--bone);
+}
+.p5-btn.solid:hover {
+  background: var(--bone);
+  color: var(--ink);
+}
+.p5-btn.gold {
+  background: var(--gold);
+  color: var(--ink);
+  outline-color: var(--ink);
+}
+.p5-btn[disabled] {
+  filter: grayscale(1) brightness(0.6);
+  pointer-events: none;
+}
+
+/* 主選單項目 */
+.menu-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 10px 26px 10px 18px;
+  text-align: left;
+  border: 0;
+  background: rgba(8, 8, 12, 0.86);
+  color: var(--bone);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 18px) 100%, 0 100%);
+  transition: transform 0.14s cubic-bezier(0.2, 1.4, 0.4, 1), background 0.12s, color 0.12s;
+  transform: translateX(0) rotate(-1.5deg);
+  animation: slideInL 0.5s both;
+}
+.menu-item:hover,
+.menu-item:focus-visible {
+  background: var(--red);
+  color: #fff;
+  transform: translateX(14px) rotate(-1.5deg) scale(1.03);
+  outline: none;
+}
+.menu-item .mi-en {
+  font-family: var(--disp);
+  font-size: 30px;
+  line-height: 1;
+  letter-spacing: 0.05em;
+}
+.menu-item .mi-zh {
+  font-weight: 900;
+  font-size: 11px;
+  opacity: 0.75;
+  letter-spacing: 0.3em;
+}
+
+/* 稀有度色彩 */
+.rar-R {
+  --rc: var(--r-R);
+}
+.rar-SR {
+  --rc: var(--r-SR);
+}
+.rar-SSR {
+  --rc: var(--r-SSR);
+}
+.rar-UR {
+  --rc: var(--r-UR);
+}
+.rar-frame {
+  border: 2px solid var(--rc);
+  background: linear-gradient(160deg, color-mix(in srgb, var(--rc) 28%, #0a0a10), #0a0a10 70%);
+  position: relative;
+}
+.rar-UR.rar-frame {
+  border-image: linear-gradient(120deg, #ff3b6b, #ffc23d, #47c2ff, #ff3b6b) 1;
+  animation: hueSpin 4s linear infinite;
+}
+
+/* 進度條 */
+.bar {
+  position: relative;
+  height: 10px;
+  background: rgba(0, 0, 0, 0.6);
+  transform: skewX(-20deg);
+  outline: 1px solid rgba(255, 255, 255, 0.35);
+  overflow: hidden;
+}
+.bar > i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: block;
+  transition: width 0.15s linear;
+}
+
+/* ---------- 動畫 ---------- */
+@keyframes slideInL {
+  from {
+    opacity: 0;
+    transform: translateX(-60px) rotate(-1.5deg);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) rotate(-1.5deg);
+  }
+}
+@keyframes slideInR {
+  from {
+    opacity: 0;
+    transform: translateX(60px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes slideInU {
+  from {
+    opacity: 0;
+    transform: translateY(40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes popIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.6) rotate(-6deg);
+  }
+  60% {
+    transform: scale(1.08) rotate(1deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0);
+  }
+}
+@keyframes pulseRed {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(232, 17, 45, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(232, 17, 45, 0);
+  }
+}
+@keyframes floaty {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+@keyframes ticker {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+@keyframes hueSpin {
+  from {
+    filter: hue-rotate(0deg);
+  }
+  to {
+    filter: hue-rotate(360deg);
+  }
+}
+@keyframes wipeIn {
+  0% {
+    clip-path: polygon(0 0, 0 0, -30% 100%, -30% 100%);
+  }
+  45% {
+    clip-path: polygon(0 0, 130% 0, 100% 100%, -30% 100%);
+  }
+  55% {
+    clip-path: polygon(0 0, 130% 0, 100% 100%, -30% 100%);
+  }
+  100% {
+    clip-path: polygon(130% 0, 130% 0, 100% 100%, 100% 100%);
+  }
+}
+@keyframes shine {
+  from {
+    transform: translateX(-120%) skewX(-20deg);
+  }
+  to {
+    transform: translateX(260%) skewX(-20deg);
+  }
+}
+@keyframes cutSlide {
+  0% {
+    transform: translateX(-120%) skewX(-12deg);
+  }
+  18% {
+    transform: translateX(0) skewX(-12deg);
+  }
+  100% {
+    transform: translateX(6%) skewX(-12deg);
+  }
+}
+@keyframes cutPortrait {
+  0% {
+    transform: translateX(-80%) scale(1.15);
+    opacity: 0;
+  }
+  20% {
+    transform: translateX(0) scale(1.05);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(3%) scale(1.12);
+    opacity: 1;
+  }
+}
+@keyframes cutText {
+  0% {
+    transform: translateX(120%) skewX(-12deg);
+    opacity: 0;
+  }
+  25% {
+    transform: translateX(0) skewX(-12deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(-4%) skewX(-12deg);
+    opacity: 1;
+  }
+}
+@keyframes speedLines {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: -600px 0;
+  }
+}
+@keyframes cutChar {
+  0% {
+    transform: translateY(-70px) scale(1.4);
+    opacity: 0;
+  }
+  60% {
+    transform: translateY(6px) scale(0.96);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+@keyframes cutFlashIn {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes spinSlow {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes flashWhite {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes bossWarn {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@keyframes shakeUi {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  20% {
+    transform: translate(-3px, 2px);
+  }
+  40% {
+    transform: translate(3px, -2px);
+  }
+  60% {
+    transform: translate(-2px, -2px);
+  }
+  80% {
+    transform: translate(2px, 3px);
+  }
+}
+@keyframes rankStamp {
+  0% {
+    opacity: 0;
+    transform: scale(4) rotate(-20deg);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(0.9) rotate(-8deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(-8deg);
+  }
+}
+
+.anim-pop {
+  animation: popIn 0.4s both;
+}
+.anim-up {
+  animation: slideInU 0.45s both;
+}
+.anim-right {
+  animation: slideInR 0.45s both;
+}
+
+/* 巨型標題文字（含黑邊與紅色陰影） */
+.title-jag {
+  font-family: var(--disp);
+  color: var(--bone);
+  -webkit-text-stroke: 2px var(--ink);
+  paint-order: stroke fill;
+  text-shadow: 5px 5px 0 var(--red), 9px 9px 0 var(--ink);
+  transform: rotate(-3deg);
+  line-height: 0.9;
+}
+
+/* 遊戲畫布區 */
+.game-field {
+  position: relative;
+  touch-action: none;
+  background: #000;
+  overflow: hidden;
+  box-shadow: 0 0 0 2px var(--ink), 0 0 0 4px var(--red), 0 0 60px rgba(232, 17, 45, 0.35);
+}
+.game-field canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+.skill-btn {
+  position: relative;
+  border-radius: 50%;
+  border: 3px solid var(--bone);
+  background: rgba(8, 8, 12, 0.72);
+  touch-action: none;
+  overflow: hidden;
+  transition: transform 0.08s;
+}
+.skill-btn:active {
+  transform: scale(0.92);
+}
+.skill-btn.ready {
+  animation: pulseRed 1.2s infinite;
+}
