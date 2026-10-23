@@ -584,6 +584,272 @@ export function updateMid(g: Game, e: Enemy, d: number, dt: number) {
 }
 
 
+// ====== 來源: src/game/engine/hazards.ts ======
+// 環境災害事件：隕石雨、落雷、強風、雷射網格、魚雷、機群突襲
+import { H, W, rand, TAU } from "../constants";
+import { audio } from "../audio";
+import { CZ_BEAM_COL, curtain } from "./patterns";
+import type { Game } from "./Game";
+
+export interface Hazard {
+  name: string;
+  t: number;
+  dur: number;
+  tm: number;
+  aux: number;
+  dir: number;
+}
+
+export const HAZARD_INFO: Record<string, { name: string; sub: string; color: string }> = {
+  meteor: { name: "隕石雨", sub: "注意頭頂墜落物", color: "#ffb347" },
+  lightning: { name: "雷暴警報", sub: "閃避落雷光柱", color: "#8fb8ff" },
+  gale: { name: "強風亂流", sub: "機體會被風吹偏", color: "#7dffcf" },
+  laserGrid: { name: "掃描雷射", sub: "兩側雷射網掃射", color: "#ff5a6e" },
+  torpedo: { name: "魚雷齊射", sub: "自下方湧出的魚雷", color: "#ff9a3d" },
+  rush: { name: "機群突襲", sub: "大量敵機湧入", color: "#ff3bd0" },
+  // ── port/008 移植的環境事件（絳月天穹）──
+  // ⚠ **008 的同名事件與母專案是不同實作**（雷射網格在 008 是「垂直光柱＋缺口」、
+  //   母專案是「兩側斜掃」；隕石雨有預警圈、亂流是正弦風…）。008 的關卡一律用 `cz_` 版本，
+  //   母專案的 6 個原版**不得修改**（SP 自家 6 關與無限模式都還在用）。
+  cz_meteor: { name: "隕石雨", sub: "注意頭頂墜落物", color: "#ffb03a" },
+  cz_lightning: { name: "天雷預兆", sub: "閃避落雷光柱", color: "#ffe66b" },
+  cz_gale: { name: "亂流風暴", sub: "機體會被風吹偏", color: "#7dffcf" },
+  cz_laserGrid: { name: "光束網格", sub: "垂直光柱・找缺口", color: "#ff3355" },
+  cz_torpedo: { name: "魚雷突襲", sub: "自側面湧出的魚雷", color: "#3de0ff" },
+  cz_rush: { name: "突擊洪流", sub: "大量敵機湧入", color: "#ff6a86" },
+  glitchStorm: { name: "訊號風暴", sub: "畫面雜訊與橫向彈幕簾", color: "#ff3df0" },
+  voidTear: { name: "空間裂隙", sub: "裂隙炸出彈環", color: "#b36bff" },
+};
+
+/**
+ * 跨專案擴充點：自訂環境事件。
+ * - 上方既有 6 種（meteor/lightning/gale/laserGrid/torpedo/rush）一律**不得修改**。
+ * - 新事件寫在這裡，鍵名就是 `StageDef.events` 要填的字串。
+ *   start 在事件開始時呼叫一次；update 每幀呼叫（自行用 h.tm 做節流、h.t / h.dur 判斷收尾）；
+ *   end 在事件結束時呼叫一次（可省略）。
+ * - 建議同時在 `HAZARD_INFO` 補一筆（名稱／副標／顏色）以顯示橫幅；沒有也能跑。
+ * - 搬移＝把新條目整段複製回母專案。
+ */
+export const CUSTOM_HAZARDS: Record<
+  string,
+  { start: (g: Game) => void; update: (g: Game, h: Hazard, dt: number) => void; end?: (g: Game) => void }
+> = {
+  // ── port/008 移植（來源：port/008/src/game/engine/hazards.ts）───────────────
+  // 節流欄位：來源用 `h.a`，SP 的 Hazard 對應欄位是 `h.tm`（`startHazard` 給 0.5 起跳，
+  //   與來源一致）。`g.tint`／`g.fx.ring`／`g.fx.explosion`／`g.later`／`curtain` 介面相同。
+  // 訊號風暴：橫向彈幕簾 ＋ 畫面雜訊色偏
+  glitchStorm: {
+    start: (g) => g.tint("#ff3df0", 0.1, 3),
+    update: (g, h, dt) => {
+      h.tm -= dt;
+      if (h.tm <= 0) {
+        h.tm = 2.3;
+        curtain(g, -10, rand(100, W - 100), 170, 170, 4, 4);
+        g.tint("#39ff8a", 0.12, 0.4);
+      }
+    },
+  },
+  // 空間裂隙：預警圈後炸出彈環
+  voidTear: {
+    start: () => {},
+    update: (g, h, dt) => {
+      h.tm -= dt;
+      if (h.tm <= 0) {
+        h.tm = 1.5;
+        const x = rand(80, W - 80);
+        const y = rand(160, H * 0.55);
+        g.fx.ring(x, y, 60, 6, 0.9, "#b36bff", 3);
+        g.later(0.9, () => {
+          g.fx.explosion(x, y, 14, { core: "#fff", mid: "#b36bff", edge: "#4a1da8", smoke: "#120a24" });
+          for (let i = 0; i < 14; i++) g.spawnEB(x, y, (i / 14) * Math.PI * 2 + h.t, 150, 5, 5);
+        });
+      }
+    },
+  },
+  // ── 008 的六個標準事件（來源：port/008/src/game/engine/hazards.ts 的 switch）────────
+  // ⚠ 這六個是 008 **自己的**實作，與母專案同名事件不同（先前漏搬 → 008 關卡跑的是 SP 舊版，
+  //   連帶讓 `rush`／`torpedo` 放出母專案的飛鏢機／自爆蟲而不是 `cz_` 版）。
+  //   節流欄位：來源用 `h.a`，SP 的 `Hazard` 對應欄位是 `h.tm`（`startHazard` 給 0.5 起跳，與來源一致）。
+  // 隕石雨：落點先畫預警圈再砸下高速隕石
+  cz_meteor: {
+    start: () => {},
+    update: (g, h, dt) => {
+      h.tm -= dt;
+      if (h.tm <= 0) {
+        h.tm = 0.42;
+        const x = rand(30, W - 30);
+        g.fx.ring(x, 30, 26, 4, 0.5, "#ffb03a", 2);
+        g.spawnEB(x, -20, Math.PI / 2 + rand(-0.18, 0.18), rand(300, 400), 3, 1);
+      }
+    },
+  },
+  // 天雷預兆：單發落雷，一半機率追著玩家打
+  cz_lightning: {
+    start: () => {},
+    update: (g, h, dt) => {
+      h.tm -= dt;
+      if (h.tm <= 0) {
+        h.tm = 1.5;
+        const x = Math.random() < 0.5 ? g.p.x + rand(-60, 60) : rand(40, W - 40);
+        g.addBeam({ x, y: 0, ang: Math.PI / 2, len: H + 40, warn: 0.95, life: 0.3, w: 38, dmg: 18, color: "#ffe66b", follow: null, thunder: true });
+      }
+    },
+  },
+  // 亂流風暴：正弦左右吹（母專案是方波來回甩）
+  cz_gale: {
+    start: () => {},
+    update: (g, h) => {
+      g.wind = Math.sin(h.t * 0.9) * 85;
+      g.bg.wind = g.wind;
+    },
+    end: (g) => {
+      g.wind = 0;
+      g.bg.wind = 0;
+    },
+  },
+  // 光束網格：7 根垂直光柱留一個缺口（母專案是兩側斜掃，完全不同）
+  cz_laserGrid: {
+    start: () => {},
+    update: (g, h, dt) => {
+      h.tm -= dt;
+      if (h.tm <= 0) {
+        h.tm = 2.8;
+        const gap = Math.floor(rand(0, 6));
+        for (let k = 0; k < 7; k++) {
+          if (k === gap || k === gap + 1) continue;
+          g.addBeam({ x: 40 + k * 76, y: 0, ang: Math.PI / 2, len: H + 40, warn: 1.1, life: 0.8, w: 28, dmg: 16, color: CZ_BEAM_COL[0], follow: null });
+        }
+      }
+    },
+  },
+  // 魚雷突襲：自左右側面衝入的自爆機（不是從畫面下方打上來的魚雷）
+  cz_torpedo: {
+    start: () => {},
+    update: (g, h, dt) => {
+      h.tm -= dt;
+      if (h.tm <= 0) {
+        h.tm = 1.15;
+        const side = Math.random() < 0.5 ? -1 : 1;
+        g.spawnEnemy("cz_kami", side < 0 ? -30 : W + 30, rand(90, 360), { dir: side });
+      }
+    },
+  },
+  // 突擊洪流：自畫面上方俯衝的機群（母專案是側向切入＋自爆蟲）
+  cz_rush: {
+    start: () => {},
+    update: (g, h, dt) => {
+      h.tm -= dt;
+      if (h.tm <= 0) {
+        h.tm = 0.55;
+        const n = 2 + (Math.random() < 0.4 ? 1 : 0);
+        for (let i = 0; i < n; i++) g.spawnEnemy("cz_dart", rand(40, W - 40), -30, { dir: Math.random() < 0.5 ? 1 : -1 });
+      }
+    },
+  },
+};
+
+export function startHazard(g: Game, name: string, dur: number) {
+  const info = HAZARD_INFO[name];
+  const custom = CUSTOM_HAZARDS[name];
+  if (!info && !custom) return;
+  g.hazards.push({ name, t: 0, dur, tm: 0.5, aux: 0, dir: Math.random() < 0.5 ? 1 : -1 });
+  if (info) g.cb.onBanner?.("HAZARD", `${info.name}｜${info.sub}`, info.color);
+  audio.sfx("warning", 1);
+  custom?.start(g);
+}
+
+const METEOR_COL = [1, 1, 3, 1, 0, 4];
+
+export function updateHazards(g: Game, dt: number) {
+  for (let i = g.hazards.length - 1; i >= 0; i--) {
+    const h = g.hazards[i];
+    // 血統蓋章（見 enemyAI.updateEnemy 的同名註解）：008 的事件（cz_）發的彈要用 008 的
+    // 敵彈外觀／碰撞半徑。每日挑戰會把 cz_ 與母專案事件混在同一場，所以逐個事件蓋章。
+    g.czEB = h.name.startsWith("cz_");
+    h.t += dt;
+    h.tm -= dt;
+    const end = h.t >= h.dur;
+    switch (h.name) {
+      case "meteor": {
+        if (!end && h.tm <= 0) {
+          h.tm = 0.44;
+          const col = METEOR_COL[(g.stage ? g.stage.theme : g.endlessTheme) % 6];
+          g.spawnEB(rand(30, W - 30), -30, Math.PI / 2 + rand(-0.18, 0.18), rand(230, 340), 5, col, { r: 14 });
+          if (Math.random() < 0.4) g.spawnEB(rand(30, W - 30), -30, Math.PI / 2 + rand(-0.1, 0.1), rand(260, 380), 2, col, { r: 9 });
+        }
+        break;
+      }
+      case "lightning": {
+        if (!end && h.tm <= 0) {
+          h.tm = 2.7;
+          const n = 3;
+          const base = rand(40, W - 40);
+          for (let k = 0; k < n; k++) {
+            const x = (base + (k * W) / n + rand(-30, 30) + W) % W;
+            g.addBeam({ x, y: -10, ang: Math.PI / 2, len: H + 40, w: 48, warn: 1.0, life: 0.32, dmg: 28, color: "#cfe2ff", follow: null, thunder: true });
+          }
+        }
+        break;
+      }
+      case "gale": {
+        if (h.tm <= 0) {
+          h.tm = 3.6;
+          h.dir = -h.dir;
+        }
+        g.wind = end ? 0 : h.dir * 130 * Math.min(1, h.t / 0.8);
+        g.bg.wind = g.wind;
+        break;
+      }
+      case "laserGrid": {
+        if (!end && h.tm <= 0) {
+          h.tm = 6.2;
+          const y1 = rand(90, 260);
+          const y2 = rand(90, 260);
+          g.addBeam({ x: 0, y: y1, ang: 0.15, rot: 0.32, len: 1300, w: 26, warn: 1.2, life: 3.6, dmg: 22, color: "#ff5a6e", follow: null });
+          g.addBeam({ x: W, y: y2, ang: Math.PI - 0.15, rot: -0.32, len: 1300, w: 26, warn: 1.2, life: 3.6, dmg: 22, color: "#ff5a6e", follow: null });
+        }
+        break;
+      }
+      case "torpedo": {
+        if (!end && h.tm <= 0) {
+          h.tm = 2.3;
+          for (let k = 0; k < 3; k++) {
+            const x = rand(40, W - 40);
+            g.addBeam({ x, y: H, ang: -Math.PI / 2, len: H, w: 14, warn: 0.9, life: 0.04, dmg: 0, color: "#ffb347", follow: null });
+            // ⚠ 這是**延遲回呼**：0.9 秒後執行時 `g.czEB` 早已被別隻敵人蓋掉 → 明確標記母專案血統
+            // （否則每日挑戰混場時，這顆魚雷會誤用 008 的敵彈外觀）。
+            g.later(0.9, () => g.spawnEB(x, H + 20, -Math.PI / 2, 500, 2, 1, { r: 11, mode: 1, acc: 120, b: 640, cz: false }));
+          }
+        }
+        break;
+      }
+      case "rush": {
+        if (!end && h.tm <= 0) {
+          h.tm = 0.3;
+          const dir = Math.random() < 0.5 ? 1 : -1;
+          g.spawnEnemy("dart", dir > 0 ? -30 : W + 30, rand(70, 260), { dir });
+          if (Math.random() < 0.45) g.spawnEnemy("kami", rand(30, W - 30), -30, {});
+        }
+        break;
+      }
+      default: {
+        CUSTOM_HAZARDS[h.name]?.update(g, h, dt);
+        break;
+      }
+    }
+    if (end) {
+      if (h.name === "gale") {
+        g.wind = 0;
+        g.bg.wind = 0;
+      }
+      CUSTOM_HAZARDS[h.name]?.end?.(g);
+      g.hazards.splice(i, 1);
+    }
+  }
+  void TAU;
+}
+
+
 // ====== 來源: src/game/engine/patterns.ts ======
 // 敵方彈幕樣式庫：環形、扇形、瞄準、簾幕、地雷等基本單元，供敵機與 Boss 組合
 import { TAU, rand, W } from "../constants";
