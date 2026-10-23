@@ -1158,6 +1158,131 @@ export function drawLash(ctx: CanvasRenderingContext2D, o: ShipDrawOpts) {
   drawGear(ctx, o, true);
 }
 
+========== 來源：003/src/game/render/gearArt.ts ==========
+// 裝備外觀：SSR(3)／UR(4) 以上才會出現，每台機體六個部位各自獨立設計（見 gearShips.ts）
+import { TAU } from "../constants";
+import { rgba, mix, shade, hh, fract } from "./colorUtil";
+import { glow } from "./sprites";
+import type { ShipDrawOpts } from "./shipUtil";
+type Ctx = CanvasRenderingContext2D;
+export type Fill = string | CanvasGradient | null | undefined;
+export const GSLOTS = ["weapon", "armor", "engine", "core", "chip", "emblem"] as const;
+export type GSlot = typeof GSLOTS[number];
+export type GearPieces = Record<GSlot, (k: GK) => void>;
+export const GEAR_ART: Record<string, GearPieces> = {};
+export const registerGear = (id: string, p: GearPieces) => { GEAR_ART[id] = p; };
+/** 外觀工具箱：只用原生 canvas API；動畫只吃 t，幾何不使用亂數 */
+export class GK {
+  readonly d: string; readonly D: string; readonly l: string; readonly W: string; readonly ink: string; readonly u: number;
+  constructor(readonly ctx: Ctx, readonly c1: string, readonly c2: string, readonly t: number, readonly lv: number, readonly thrust = 1) {
+    this.d = shade(c1, -0.3); this.D = shade(c2, -0.34); this.l = shade(c1, 0.22, -0.05); this.W = mix(c2, "#ffffff", 0.62); this.ink = mix(c1, "#05060c", 0.82); this.u = lv - 2;
+  }
+  a(c: string, al: number) { return rgba(c, al); }
+  tw(i = 0, spd = 3) { return 0.5 + 0.5 * Math.sin(this.t * spd + i * 1.7); }
+  n(i: number, s = 0) { return hh(i, s) * 2 - 1; }
+  private fs(f: Fill, s: Fill, lw: number, p?: Path2D) {
+    const c = this.ctx; if (f) { c.fillStyle = f; p ? c.fill(p) : c.fill(); } if (s) { c.strokeStyle = s; c.lineWidth = lw; c.lineJoin = "round"; p ? c.stroke(p) : c.stroke(); }
+  }
+  glow(x: number, y: number, r: number, c: string, al = 1) {
+    const g = this.ctx; g.save(); g.globalCompositeOperation = "lighter"; g.globalAlpha = Math.max(0, Math.min(1, al)); g.drawImage(glow(c, 64), x - r, y - r, r * 2, r * 2); g.restore();
+  }
+  P(d: string, fill?: Fill, stroke?: Fill, lw = 1, mir = false) {
+    const c = this.ctx; const p = new Path2D(d); this.fs(fill, stroke, lw, p); if (mir) { c.save(); c.scale(-1, 1); this.fs(fill, stroke, lw, p); c.restore(); }
+  }
+  poly(pts: number[], fill?: Fill, stroke?: Fill, lw = 1) {
+    const c = this.ctx; c.beginPath(); c.moveTo(pts[0], pts[1]); for (let i = 2; i < pts.length; i += 2) c.lineTo(pts[i], pts[i + 1]); c.closePath(); this.fs(fill, stroke, lw);
+  }
+  line(pts: number[], col: string, lw = 1) {
+    const c = this.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw; c.lineCap = "round"; c.lineJoin = "round"; c.beginPath(); c.moveTo(pts[0], pts[1]);
+    for (let i = 2; i < pts.length; i += 2) c.lineTo(pts[i], pts[i + 1]); c.stroke(); c.restore();
+  }
+  ring(x: number, y: number, r: number, col: string, lw = 1, dash?: number[], off = 0, ry?: number, rot = 0) {
+    const c = this.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw; if (dash) { c.setLineDash(dash); c.lineDashOffset = off; } c.beginPath(); c.ellipse(x, y, r, ry ?? r, rot, 0, TAU); c.stroke(); c.restore();
+  }
+  arc(x: number, y: number, r: number, a0: number, a1: number, col: string, lw = 1) {
+    const c = this.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw; c.lineCap = "round"; c.beginPath(); c.arc(x, y, r, a0, a1); c.stroke(); c.restore();
+  }
+  ell(x: number, y: number, rx: number, ry: number, rot = 0, fill?: Fill, stroke?: Fill, lw = 1) {
+    this.ctx.beginPath(); this.ctx.ellipse(x, y, rx, ry, rot, 0, TAU); this.fs(fill, stroke, lw);
+  }
+  blade(x: number, y: number, len: number, wid: number, ang: number, fill?: Fill, stroke?: Fill, lw = 1, belly = 0.45) {
+    const c = this.ctx; c.save(); c.translate(x, y); c.rotate(ang); c.beginPath(); c.moveTo(0, 0);
+    c.quadraticCurveTo(len * belly, -wid, len, 0); c.quadraticCurveTo(len * belly, wid, 0, 0); c.closePath(); this.fs(fill, stroke, lw); c.restore();
+  }
+  ngon(x: number, y: number, r: number, n: number, rot = -Math.PI / 2, fill?: Fill, stroke?: Fill, lw = 1) {
+    const c = this.ctx; c.beginPath(); for (let i = 0; i < n; i++) { const a = rot + (i * TAU) / n; i ? c.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r) : c.moveTo(x + Math.cos(a) * r, y + Math.sin(a) * r); } c.closePath(); this.fs(fill, stroke, lw);
+  }
+  star(x: number, y: number, r: number, n: number, inner = 0.45, rot = -Math.PI / 2, fill?: Fill, stroke?: Fill, lw = 1) {
+    const c = this.ctx; c.beginPath(); for (let i = 0; i < n * 2; i++) { const a = rot + (i * Math.PI) / n, rr = i % 2 ? r * inner : r; i ? c.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr) : c.moveTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); } c.closePath(); this.fs(fill, stroke, lw);
+  }
+  spark(x: number, y: number, r: number, col: string, al = 1) {
+    const c = this.ctx; c.save(); c.globalAlpha = al; c.fillStyle = col; c.beginPath(); c.moveTo(x, y - r); c.quadraticCurveTo(x, y, x + r, y); c.quadraticCurveTo(x, y, x, y + r); c.quadraticCurveTo(x, y, x - r, y); c.quadraticCurveTo(x, y, x, y - r); c.fill(); c.restore(); this.glow(x, y, r * 1.6, col, al * 0.6);
+  }
+  lg(x0: number, y0: number, x1: number, y1: number, st: Array<[number, string]>) { const g = this.ctx.createLinearGradient(x0, y0, x1, y1); for (const [o, c] of st) g.addColorStop(o, c); return g; }
+  rg(x: number, y: number, r0: number, r1: number, st: Array<[number, string]>) { const g = this.ctx.createRadialGradient(x, y, r0, x, y, r1); for (const [o, c] of st) g.addColorStop(o, c); return g; }
+  sym(fn: (s: number) => void) { const c = this.ctx; for (const s of [-1, 1]) { c.save(); c.scale(s, 1); fn(s); c.restore(); } }
+  at(x: number, y: number, rot: number, fn: () => void) { const c = this.ctx; c.save(); c.translate(x, y); c.rotate(rot); fn(); c.restore(); }
+  orbit(n: number, rx: number, ry: number, spd: number, fn: (i: number, x: number, y: number, a: number, dp: number) => void, cx = 0, cy = 0, tilt = 0) {
+    const ct = Math.cos(tilt), st = Math.sin(tilt);
+    for (let i = 0; i < n; i++) { const a = this.t * spd + (i * TAU) / n, ox = Math.cos(a) * rx, oy = Math.sin(a) * ry; fn(i, cx + ox * ct - oy * st, cy + ox * st + oy * ct, a, Math.sin(a)); }
+  }
+  ember(n: number, x: number, y: number, spread: number, rise: number, col: string, size = 1.5, spd = 0.6) {
+    for (let i = 0; i < n; i++) { const f = fract(this.t * spd + i * 0.618), px = x + this.n(i, 3) * spread * (0.25 + f), py = y + f * rise; this.glow(px, py, size * 3, col, (1 - f) * 0.8); }
+  }
+  zig(x0: number, y0: number, x1: number, y1: number, seg: number, amp: number, col: string, lw = 1.2, seed = 0) {
+    const fr = Math.floor(this.t * 12), dx = x1 - x0, dy = y1 - y0, L = Math.hypot(dx, dy) || 1, nx = -dy / L, ny = dx / L; const p: number[] = [x0, y0];
+    for (let i = 1; i < seg; i++) { const f = i / seg, o = (hh(i, seed, fr) * 2 - 1) * amp; p.push(x0 + dx * f + nx * o, y0 + dy * f + ny * o); } p.push(x1, y1);
+    const c = this.ctx; c.save(); c.globalCompositeOperation = "lighter"; this.line(p, rgba(col, 0.35), lw * 3); this.line(p, "#ffffff", lw * 0.7); c.restore();
+  }
+}
+const BACK: GSlot[] = ["emblem", "armor", "engine"], FRONT: GSlot[] = ["weapon", "core", "chip"];
+export function drawGearArt(ctx: Ctx, o: ShipDrawOpts, front: boolean) {
+  const art = GEAR_ART[o.id]; const g = o.gear; if (!art || !g) return;
+  for (const s of front ? FRONT : BACK) {
+    const lv = g[GSLOTS.indexOf(s)]; if (!(lv >= 3)) continue;
+    ctx.save(); ctx.globalAlpha = 1; ctx.globalCompositeOperation = "source-over"; ctx.setLineDash([]);
+    try { art[s](new GK(ctx, o.color, o.color2, o.t, Math.min(4, lv), o.thrust)); } catch { /* 單件失敗不拖垮整台 */ }
+    ctx.restore();
+  }
+}
+
+========== 來源：003/src/game/render/gearShips.ts ==========
+// 十二架機體的 SSR／UR 專屬裝備外觀：每架六個部位各自設計，並貼合該機體的設計語彙
+import { registerGear } from "./gearArt";
+const PI = Math.PI, TAU = PI * 2, RG = ["#ff5a4a", "#3aa8ff", "#ffd23a"];
+registerGear("snipper", {
+  weapon: (k) => k.sym(() => { const o = 0.1 + (0.5 + 0.5 * Math.sin(k.t * 4)) * 0.3; k.at(38, -24, 0, () => { for (const s of [-1, 1]) k.at(0, 4, s * o, () => k.P("M-1 3L4 0L2 -22L-1 -30Z", k.lg(-1, 0, 4, 0, [[0, "#fff"], [1, k.W]]), k.c1, 1)); k.ell(0, 4, 2.6, 2.6, 0, k.c1); k.glow(0, -10, 14, k.c1, 0.3); }); }),
+  armor: (k) => k.sym(() => { k.P("M12 -8L34 4L30 34L12 28Z", k.a(k.ink, 0.85), k.c1, 1.4); k.ctx.save(); k.ctx.setLineDash([3, 3]); k.line([14, 0, 30, 8], k.a("#fff", 0.8), 1); k.line([14, 12, 30, 20], k.a("#fff", 0.8), 1); k.ctx.restore(); k.P("M16 -4L26 2L22 10Z", k.a(k.c2, 0.6)); }),
+  engine: (k) => k.sym(() => { for (let r = 0; r < 2; r++) { const p: number[] = []; for (let i = 0; i <= 14; i++) { const f = i / 14; p.push(13 + Math.sin(f * 6 - k.t * 5 + r * 2) * 5 * f, 44 + f * 34); } k.line(p, k.a(r ? k.c1 : k.W, 0.85), 2 - r * 0.6); } }),
+  core: (k) => { k.glow(0, 4, 14, k.c1, 0.5); k.ell(0, 4, 8, 8, 0, k.ink, k.c1, 1.4); for (const [dx, dy] of [[-2.5, -2.5], [2.5, -2.5], [-2.5, 2.5], [2.5, 2.5]]) k.ell(dx, 4 + dy, 1.2, 1.2, 0, k.W); k.line([-6, 4, 6, 4], k.a(k.c1, 0.8), 1); },
+  chip: (k) => k.orbit(3 + k.u, 30, 30, 1.1, (_i, x, y, a) => k.at(x, y, a, () => { k.P("M0 -9L1.6 4L0 8L-1.6 4Z", k.W, k.c1, 0.7); k.ell(0, 3, 0.7, 1.6, 0, k.ink); }), 0, -4),
+  emblem: (k) => { k.ring(0, 0, 44, k.a(k.W, 0.5), 5); for (let i = 0; i < 36; i++) { const a = i * PI / 18 + k.t * 0.2; k.line([Math.cos(a) * 41, Math.sin(a) * 41, Math.cos(a) * (i % 3 ? 46 : 50), Math.sin(a) * (i % 3 ? 46 : 50)], k.a(k.c1, 0.9), 1); } k.glow(0, 0, 54, k.c1, 0.2); },
+});
+registerGear("splash", {
+  weapon: (k) => k.sym(() => { k.at(36, -10, 0, () => { k.P("M-3 18H3V-12H-3Z", k.lg(-3, 0, 3, 0, [[0, "#7f8ea0"], [0.5, "#f1f6ff"], [1, "#6a7888"]]), k.ink, 1); k.ell(0, -14, 4, 2, 0, k.ink, k.c1, 1.2); k.glow(0, -16, 10, k.c1, 0.5 + 0.3 * k.tw(1, 8)); for (let i = 0; i < 3; i++) { const f = (k.t * 2 + i / 3) % 1; k.ell(0, -16 - f * 24, 1.6 * (1 - f) + 0.6, 2.4, 0, k.a("#fff", 1 - f)); } }); }),
+  armor: (k) => { k.ctx.save(); k.ell(0, 4, 40, 46, 0, k.a(k.c1, 0.08 + 0.04 * k.u), k.a("#e6f8ff", 0.7), 1.6); k.arc(0, 4, 36, -2.3, -1.2, k.a("#fff", 0.9), 2.4); k.arc(0, 4, 36, 0.5, 1.0, k.a("#fff", 0.6), 1.6); k.ctx.restore(); },
+  engine: (k) => k.sym(() => { for (let i = 0; i < 6; i++) { const f = (k.t * 1.4 + i / 6) % 1; k.ell(10 + Math.sin(i * 3) * 3, 40 + f * 40, 2.4 * (1 - f) + 1, 4 * (1 - f) + 1, 0, k.a(i % 2 ? k.c1 : "#fff", 0.9 * (1 - f))); } k.glow(10, 42, 10, k.c1, 0.5); }),
+  core: (k) => { k.glow(0, 6, 15, k.c1, 0.55); k.P("M0 -8C8 2 8 12 0 14C-8 12 -8 2 0 -8Z", k.lg(0, -8, 0, 14, [[0, "#fff"], [1, k.c1]]), k.W, 1); for (let i = 0; i < 2; i++) { const f = (k.t * 0.8 + i / 2) % 1; k.ring(0, 6, 8 + f * 10, k.a(k.c1, 0.8 * (1 - f)), 1.4); } },
+  chip: (k) => k.orbit(4 + k.u, 40, 26, 1.1, (i, x, y, _a, dp) => { const r = 3 + (i % 3) + dp; k.ell(x, y, r, r, 0, k.a("#bfeaff", 0.35), k.a("#fff", 0.9), 1); k.ell(x - r * 0.3, y - r * 0.3, r * 0.25, r * 0.25, 0, "#fff"); }, 0, 4),
+  emblem: (k) => { for (let i = 0; i < 4; i++) { const f = (k.t * 0.7 + i / 4) % 1; k.arc(0, 2, 20 + f * 30, PI * 1.1, PI * 1.9, k.a(k.c1, 0.85 * (1 - f)), 3 * (1 - f) + 1); k.arc(0, 2, 20 + f * 30, 0.1, PI * 0.9, k.a("#e6f8ff", 0.6 * (1 - f)), 2 * (1 - f) + 0.5); } },
+});
+registerGear("arbalest", {
+  weapon: (k) => k.sym(() => { k.at(34, -30, 0, () => { k.P("M0 -14Q12 -6 0 4Q-12 -6 0 -14Z", k.a(k.c2, 0.9), k.c1, 1.2); k.line([0, -14, 0, 8], k.W, 1.2); k.P("M0 -26L2 -16H-2Z", "#fff", k.c1, 0.8); k.glow(0, -24, 10, k.c1, 0.5 + 0.3 * k.tw(1, 6)); }); }),
+  armor: (k) => k.sym(() => { k.P("M6 -20C24 -34 46 -24 50 0L44 0C40 -16 24 -26 6 -14Z", k.lg(6, 0, 50, 0, [[0, k.c1], [1, k.d]]), k.W, 1); k.line([10, -20, 44, -10], k.a(k.W, 0.9), 1); k.ctx.save(); for (let i = 0; i < 4; i++) k.P(`M${14 + i * 8} ${-18 + i * 4}L${18 + i * 8} ${-10 + i * 4}L${10 + i * 8} ${-10 + i * 4}Z`, k.a(k.c1, 0.9)); k.ctx.restore(); }),
+  engine: (k) => k.sym(() => { for (let i = 0; i < 5; i++) { const a = 1.1 + i * 0.22; k.at(6, 38, a * (1 + 0), () => { k.P("M0 0Q10 -2 24 0Q10 3 0 0Z", k.a(i % 2 ? k.c1 : k.W, 0.75 - i * 0.06)); }); } k.glow(10, 42, 12, k.c1, 0.4); }),
+  core: (k) => { k.glow(0, 6, 15, k.c1, 0.55); k.P("M-3 -6H3V-3H6V3H3V9H-3V3H-6V-3H-3Z", k.lg(0, -6, 0, 9, [[0, "#fff"], [1, k.c1]]), k.W, 1); k.ring(0, 2, 10, k.a(k.c1, 0.7), 1, [3, 3], -k.t * 10); },
+  chip: (k) => k.orbit(4, 36, 36, 1, (i, x, y, a) => k.at(x, y, a + i, () => { k.line([-4, 0, 4, 0], k.W, 1.6); k.line([0, -4, 0, 4], k.W, 1.6); k.glow(0, 0, 6, k.c1, 0.4); }), 0, -2),
+  emblem: (k) => { k.glow(0, -2, 60, k.c1, 0.25); k.ring(0, -2, 38, k.a(k.c1, 0.9), 2); k.ring(0, -2, 44, k.a(k.W, 0.5), 1, [3, 5], -k.t * 12); for (let i = 0; i < 4; i++) { const a = i * PI / 2 + k.t * 0.2; k.line([Math.cos(a) * 30, -2 + Math.sin(a) * 30, Math.cos(a) * 62, -2 + Math.sin(a) * 62], k.a(k.c1, 0.8), 2.4); } },
+});
+registerGear("parasol", {
+  weapon: (k) => k.sym((s) => { k.at(40, -26 + Math.sin(k.t * 1.6 + s) * 2, k.t * 0.8 * s, () => { for (let i = 0; i < 8; i++) { k.ctx.fillStyle = i % 2 ? k.c1 : k.c2; k.ctx.beginPath(); k.ctx.moveTo(0, 0); k.ctx.arc(0, 0, 9, i * 0.785, (i + 1) * 0.785); k.ctx.fill(); } k.ring(0, 0, 9, "#c8102e", 1.4); }); }),
+  armor: (k) => k.sym(() => { k.P("M7 12Q34 -2 40 30Q22 24 6 32Z", k.lg(7, 0, 40, 0, [[0, k.c2], [1, k.c1]]), "#c8102e", 1.2); for (let i = 0; i < 5; i++) k.line([8, 20, 14 + i * 7, 12 + Math.abs(i - 2) * 5 + 6], k.a("#8a1030", 0.6), 0.8); k.star(26, 20, 4, 5, 0.45, -PI / 2, k.a("#fff", 0.8)); }),
+  engine: (k) => { for (let i = 0; i < 8; i++) { const f = (k.t * 0.5 + i / 8) % 1; k.ell(Math.sin(i * 3.1 + f * 4) * 14, 44 + f * 44, 3, 1.6, f * 6 + i, k.a(i % 2 ? k.c1 : "#fff", 0.9 * (1 - f))); } k.glow(0, 44, 12, k.c1, 0.4); },
+  core: (k) => { k.glow(0, 12, 15, k.c1, 0.5); for (let i = 0; i < 5; i++) k.at(0, 12, i * TAU / 5 + k.t * 0.8, () => k.P("M0 -1C-5 -3 -5 -9 0 -11C5 -9 5 -3 0 -1Z", k.a(k.c1, 0.5), k.a("#fff", 0.9), 1)); k.ell(0, 12, 2, 2, 0, "#fff6b8"); },
+  chip: (k) => k.orbit(3 + k.u, 36, 22, 0.9, (i, x, y, a) => { k.glow(x, y, 12, "#ff4d4d", 0.4); k.at(x, y, Math.sin(a + i) * 0.3, () => { k.ell(0, 0, 4.4, 5.4, 0, k.a("#ff4d4d", 0.85), "#fff6d6", 1); k.line([-3, -5, 3, -5], "#8a1030", 1.2); k.line([-3, 5, 3, 5], "#8a1030", 1.2); }); }, 0, 6),
+  emblem: (k) => { k.at(0, -10, k.t * 0.25, () => { for (let i = 0; i < 16; i++) { k.ctx.fillStyle = i % 2 ? k.a(k.c1, 0.28) : k.a(k.c2, 0.24); k.ctx.beginPath(); k.ctx.moveTo(0, 0); k.ctx.arc(0, 0, 54, (i / 16) * TAU, ((i + 1) / 16) * TAU); k.ctx.fill(); } k.ring(0, 0, 54, k.a("#c8102e", 0.8), 2); }); },
+});
+
 ========== 來源：003/src/game/render/shipDrawParasol.ts ==========
 // 紙傘：細長機身＋機首的和紙傘（俯視為圓形傘面，aux＝張開程度，傘骨與紙面分瓣）
 import { drawGear, sp, lin, flame, mirror } from "./shipUtil";
