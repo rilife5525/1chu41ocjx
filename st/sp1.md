@@ -1,6 +1,7 @@
 https://raw.githubusercontent.com/rilife5525/1chu41ocjx/refs/heads/main/st/st.md (實際上是zip檔案，請更名後解壓)
 
 這是一份遊戲資料設定(這是一個幻想的戰機閃避遊戲，有各時空的角色匯聚)，裡面有(ships.ts)戰機名/駕駛名/(stages.ts)關卡簡短描述和(enemies.ts)關卡boss
+ref裡有前次寫過但中斷的內容，可以閱讀完再接續create未寫的部份，省得不停的重寫這些內容又被中斷。
 
 請你依此創造一個遊戲的世界觀，與各章劇情，寫得像小說一樣。
 各章劇情每個角色獨立，當使用A角色時跟B角色的劇情會不一樣，但相關角色會有相關劇情。
